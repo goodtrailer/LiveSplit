@@ -642,7 +642,7 @@ namespace LiveSplit.View
                     pauseMenuItem.Enabled = false;
                     splitMenuItem.Enabled = false;
                     hibernateRunMenuItem.Enabled = false;
-                    loadRunMenuItem.Enabled = (CurrentState.Run.IsAutoSplitterActive()) ? false : true;
+                    loadRunMenuItem.Enabled = true;
                 }
                 if (CurrentState.CurrentSplitIndex >= CurrentState.Run.Count - 1)
                     skipSplitMenuItem.Enabled = false;
@@ -680,7 +680,7 @@ namespace LiveSplit.View
                 resetMenuItem.Enabled = false;
                 pauseMenuItem.Enabled = false;
                 hibernateRunMenuItem.Enabled = false;
-                loadRunMenuItem.Enabled = (CurrentState.Run.IsAutoSplitterActive()) ? false : true;
+                loadRunMenuItem.Enabled = true;
                 undoPausesMenuItem.Enabled = false;
                 undoSplitMenuItem.Enabled = false;
                 skipSplitMenuItem.Enabled = false;
@@ -707,8 +707,8 @@ namespace LiveSplit.View
                 splitMenuItem.Text = "Resume";
                 undoPausesMenuItem.Enabled = true;
                 pauseMenuItem.Enabled = false;
-                hibernateRunMenuItem.Enabled = (CurrentState.Run.IsAutoSplitterActive()) ? false : true;
-                loadRunMenuItem.Enabled = (CurrentState.Run.IsAutoSplitterActive()) ? false : true;
+                hibernateRunMenuItem.Enabled = true;
+                loadRunMenuItem.Enabled = true;
             });
         }
 
@@ -2581,79 +2581,80 @@ namespace LiveSplit.View
 
         private void HibernateRun()
         {
-            if (CurrentState.CurrentPhase == TimerPhase.Paused && !CurrentState.Run.IsAutoSplitterActive())
-                using (var hibernateDialog = new SaveFileDialog())
+            if (CurrentState.CurrentPhase != TimerPhase.Paused)
+                return;
+            using (var hibernateDialog = new SaveFileDialog())
+            {
+                hibernateDialog.FileName = CurrentState.Run.GetExtendedFileName();
+                hibernateDialog.Filter = "LiveSplit Run (*.lsr)|*.lsr|All Files (*.*)|*.*";
+                IsInDialogMode = true;
+                try
                 {
-                    hibernateDialog.FileName = CurrentState.Run.GetExtendedFileName();
-                    hibernateDialog.Filter = "LiveSplit Run (*.lsr)|*.lsr|All Files (*.*)|*.*";
-                    IsInDialogMode = true;
-                    try
+                    var result = hibernateDialog.ShowDialog(this);
+                    if (result == DialogResult.OK)
                     {
-                        var result = hibernateDialog.ShowDialog(this);
-                        if (result == DialogResult.OK)
+                        XmlDocument document = new XmlDocument();
+                        XmlNode docNode = document.CreateXmlDeclaration("1.0", "UTF-8", null);
+                        document.AppendChild(docNode);
+
+                        XmlElement parent = document.CreateElement("Save");
+                        var startTime = Model.CurrentState.AttemptStarted;
+                        XmlAttribute attributeStarted = document.CreateAttribute("started");
+                        attributeStarted.InnerText = startTime.Time.ToUniversalTime().ToString(CultureInfo.InvariantCulture);
+                        XmlAttribute attributeIsStartedSynced = document.CreateAttribute("isStartedSynced");
+                        attributeIsStartedSynced.InnerText = startTime.SyncedWithAtomicClock.ToString();
+                        XmlAttribute attributeIsGameTimeInitialized = document.CreateAttribute("isGameTimeInitialized");
+                        attributeIsGameTimeInitialized.InnerText = CurrentState.IsGameTimeInitialized.ToString();
+                        parent.Attributes.Append(attributeStarted);
+                        parent.Attributes.Append(attributeIsStartedSynced);
+                        parent.Attributes.Append(attributeIsGameTimeInitialized);
+
+                        XmlElement elementGameName = document.CreateElement("GameName");
+                        elementGameName.InnerText = CurrentState.Run.GameName;
+                        XmlElement elementCategoryName = document.CreateElement("CategoryName");
+                        elementCategoryName.InnerText = CurrentState.Run.CategoryName;
+                        XmlElement elementRealTime = document.CreateElement("RealTime");
+                        elementRealTime.InnerText = CurrentState.CurrentTime.RealTime.ToString();
+                        XmlElement elementGameTime = document.CreateElement("GameTime");
+                        elementGameTime.InnerText = CurrentState.CurrentTime.GameTime.ToString();
+                        XmlElement elementPauseTime = document.CreateElement("PauseTime");
+                        elementPauseTime.InnerText = (CurrentState.PauseTime ?? TimeSpan.Zero).ToString();
+                        XmlElement elementSegments = document.CreateElement("Segments");
+                        foreach (ISegment segment in CurrentState.Run)
                         {
-                            XmlDocument document = new XmlDocument();
-                            XmlNode docNode = document.CreateXmlDeclaration("1.0", "UTF-8", null);
-                            document.AppendChild(docNode);
-
-                            XmlElement parent = document.CreateElement("Save");
-                            var startTime = Model.CurrentState.AttemptStarted;
-                            XmlAttribute attributeStarted = document.CreateAttribute("started");
-                            attributeStarted.InnerText = startTime.Time.ToUniversalTime().ToString(CultureInfo.InvariantCulture);
-                            XmlAttribute attributeIsStartedSynced = document.CreateAttribute("isStartedSynced");
-                            attributeIsStartedSynced.InnerText = startTime.SyncedWithAtomicClock.ToString();
-                            XmlAttribute attributeIsGameTimeInitialized = document.CreateAttribute("isGameTimeInitialized");
-                            attributeIsGameTimeInitialized.InnerText = CurrentState.IsGameTimeInitialized.ToString();
-                            parent.Attributes.Append(attributeStarted);
-                            parent.Attributes.Append(attributeIsStartedSynced);
-                            parent.Attributes.Append(attributeIsGameTimeInitialized);
-
-                            XmlElement elementGameName = document.CreateElement("GameName");
-                            elementGameName.InnerText = CurrentState.Run.GameName;
-                            XmlElement elementCategoryName = document.CreateElement("CategoryName");
-                            elementCategoryName.InnerText = CurrentState.Run.CategoryName;
-                            XmlElement elementRealTime = document.CreateElement("RealTime");
-                            elementRealTime.InnerText = CurrentState.CurrentTime.RealTime.ToString();
-                            XmlElement elementGameTime = document.CreateElement("GameTime");
-                            elementGameTime.InnerText = CurrentState.CurrentTime.GameTime.ToString();
-                            XmlElement elementPauseTime = document.CreateElement("PauseTime");
-                            elementPauseTime.InnerText = (CurrentState.PauseTime ?? TimeSpan.Zero).ToString();
-                            XmlElement elementSegments = document.CreateElement("Segments");
-                            foreach (ISegment segment in CurrentState.Run)
-                            {
-                                XmlElement elementSegment = document.CreateElement("Segment");
-                                XmlAttribute attributeName = document.CreateAttribute("Name");
-                                attributeName.InnerText = segment.Name;
-                                XmlAttribute attributeRealTime = document.CreateAttribute("RealTime");
-                                attributeRealTime.InnerText = segment.SplitTime.RealTime.ToString();
-                                XmlAttribute attributeGameTime = document.CreateAttribute("GameTime");
-                                attributeGameTime.InnerText = segment.SplitTime.GameTime.ToString();
-                                elementSegment.Attributes.Append(attributeName);
-                                elementSegment.Attributes.Append(attributeRealTime);
-                                elementSegment.Attributes.Append(attributeGameTime);
-                                elementSegments.AppendChild(elementSegment);
-                            }
-                            parent.AppendChild(elementGameName);
-                            parent.AppendChild(elementCategoryName);
-                            parent.AppendChild(elementRealTime);
-                            parent.AppendChild(elementGameTime);
-                            parent.AppendChild(elementPauseTime);
-                            parent.AppendChild(elementSegments);
-                            document.AppendChild(parent);
-                            document.Save(hibernateDialog.FileName);
+                            XmlElement elementSegment = document.CreateElement("Segment");
+                            XmlAttribute attributeName = document.CreateAttribute("Name");
+                            attributeName.InnerText = segment.Name;
+                            XmlAttribute attributeRealTime = document.CreateAttribute("RealTime");
+                            attributeRealTime.InnerText = segment.SplitTime.RealTime.ToString();
+                            XmlAttribute attributeGameTime = document.CreateAttribute("GameTime");
+                            attributeGameTime.InnerText = segment.SplitTime.GameTime.ToString();
+                            elementSegment.Attributes.Append(attributeName);
+                            elementSegment.Attributes.Append(attributeRealTime);
+                            elementSegment.Attributes.Append(attributeGameTime);
+                            elementSegments.AppendChild(elementSegment);
                         }
-                    }
-                    finally
-                    {
-                        IsInDialogMode = false;
+                        parent.AppendChild(elementGameName);
+                        parent.AppendChild(elementCategoryName);
+                        parent.AppendChild(elementRealTime);
+                        parent.AppendChild(elementGameTime);
+                        parent.AppendChild(elementPauseTime);
+                        parent.AppendChild(elementSegments);
+                        document.AppendChild(parent);
+                        document.Save(hibernateDialog.FileName);
                     }
                 }
+                finally
+                {
+                    IsInDialogMode = false;
+                }
+            }
         }
 
 
         private void LoadRun()
         {
-            if (CurrentState.CurrentPhase == TimerPhase.Running || CurrentState.Run.IsAutoSplitterActive())
+            if (CurrentState.CurrentPhase == TimerPhase.Running)
                 return;
 
             DialogResult result;
@@ -2938,25 +2939,8 @@ namespace LiveSplit.View
 
             var components = Layout.Components;
             if (CurrentState.Run.IsAutoSplitterActive())
-            {
                 components = components.Concat(new[] { CurrentState.Run.AutoSplitter.Component });
-                hibernateRunMenuItem.Enabled = false;
-                loadRunMenuItem.Enabled = false;
-            }
-            //repetitive but needed for when autosplitter activated/deactivated after loading splits
-            else switch (CurrentState.CurrentPhase)
-            {
-                case TimerPhase.NotRunning:
-                    loadRunMenuItem.Enabled = true;
-                    break;
-                case TimerPhase.Ended:
-                    loadRunMenuItem.Enabled = true;
-                    break;
-                case TimerPhase.Paused:
-                    hibernateRunMenuItem.Enabled = true;
-                    loadRunMenuItem.Enabled = true;
-                    break;
-            }
+                
             var componentControls =
                 components
                 .Select(x => x.ContextMenuControls)
